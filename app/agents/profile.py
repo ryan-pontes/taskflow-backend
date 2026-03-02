@@ -6,7 +6,9 @@ from app.integrations.supabase import get_member_with_user_info, update_member_p
 
 _llm = None
 
-def get_llm():
+def get_llm(api_key: str = None):
+    if api_key:
+        return ChatOpenAI(model="gpt-4o", temperature=0.3, api_key=api_key)
     global _llm
     if _llm is None:
         _llm = ChatOpenAI(model="gpt-4o", temperature=0.3, api_key=settings.OPENAI_API_KEY)
@@ -105,7 +107,7 @@ async def handle_conversation(member_id: str, data: dict) -> dict:
     if not member:
         return {"error": "Membro não encontrado"}
     
-    chain = PROFILE_CONVERSATION_PROMPT | get_llm() | JsonOutputParser()
+    chain = PROFILE_CONVERSATION_PROMPT | get_llm(api_key=data.get("openai_key")) | JsonOutputParser()
     
     result = await chain.ainvoke({
         "conversation_history": data.get("history", "Início da conversa"),
@@ -143,7 +145,7 @@ async def analyze_profile(member_id: str) -> dict:
     
     tasks = await get_tasks_by_assignee(member_id)
     
-    chain = PROFILE_ANALYSIS_PROMPT | get_llm() | JsonOutputParser()
+    chain = PROFILE_ANALYSIS_PROMPT | get_llm() | JsonOutputParser()  # analyze não recebe openai_key, usa fallback
     
     result = await chain.ainvoke({
         "profile": member.get("profile", {}),

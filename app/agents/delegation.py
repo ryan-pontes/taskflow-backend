@@ -3,11 +3,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from app.config import settings
 from app.integrations.supabase import get_members_by_org, get_member_workload
-from app.integrations.google_calendar import calendar_client
 
 _llm = None
 
-def get_llm():
+def get_llm(api_key: str = None):
+    if api_key:
+        return ChatOpenAI(model="gpt-4o", temperature=0, api_key=api_key)
     global _llm
     if _llm is None:
         _llm = ChatOpenAI(model="gpt-4o", temperature=0, api_key=settings.OPENAI_API_KEY)
@@ -83,7 +84,7 @@ async def run_delegation_agent(task: dict, user_context: dict) -> dict:
         })
     
     # Chamar LLM
-    chain = DELEGATION_PROMPT | get_llm() | JsonOutputParser()
+    chain = DELEGATION_PROMPT | get_llm(api_key=user_context.get("openai_key")) | JsonOutputParser()
     
     result = await chain.ainvoke({
         "title": task.get("title", ""),

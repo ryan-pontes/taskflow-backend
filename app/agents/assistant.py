@@ -7,7 +7,9 @@ from app.integrations import supabase as db
 
 _llm = None
 
-def get_llm():
+def get_llm(api_key: str = None):
+    if api_key:
+        return ChatOpenAI(model="gpt-4o", temperature=0.3, api_key=api_key)
     global _llm
     if _llm is None:
         _llm = ChatOpenAI(model="gpt-4o", temperature=0.3, api_key=settings.OPENAI_API_KEY)
@@ -48,7 +50,7 @@ Responda SEMPRE em JSON:
 async def run_assistant_agent(message: str, user_context: dict) -> dict:
     """Processar mensagem do chat e executar ações"""
     
-    chain = ASSISTANT_PROMPT | get_llm() | JsonOutputParser()
+    chain = ASSISTANT_PROMPT | get_llm(api_key=user_context.get("openai_key")) | JsonOutputParser()
     
     result = await chain.ainvoke({
         "message": message,

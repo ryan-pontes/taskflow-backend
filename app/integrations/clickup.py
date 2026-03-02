@@ -5,10 +5,9 @@ from app.config import settings
 CLICKUP_BASE_URL = "https://api.clickup.com/api/v2"
 
 class ClickUpClient:
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key or settings.CLICKUP_API_KEY
+    def __init__(self, access_token: str):
         self.headers = {
-            "Authorization": self.api_key,
+            "Authorization": access_token,
             "Content-Type": "application/json"
         }
     
@@ -138,5 +137,8 @@ def map_task_from_clickup(clickup_task: dict) -> dict:
     }
 
 
-# Singleton
-clickup_client = ClickUpClient()
+async def get_clickup_client(org_id: str) -> Optional["ClickUpClient"]:
+    """Retorna cliente ClickUp para a org, ou None se não configurado."""
+    from app.integrations.token_store import get_clickup_token
+    token = await get_clickup_token(org_id)
+    return ClickUpClient(access_token=token) if token else None

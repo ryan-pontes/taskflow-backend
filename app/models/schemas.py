@@ -163,3 +163,16 @@ class SpaceProgress(BaseModel):
     total_tasks: int
     completed_tasks: int
     progress_percentage: float
+
+# === Integrations ===
+class OpenAIKeyConfig(BaseModel):
+    api_key: str
+
+class IntegrationStatus(BaseModel):
+    connected: bool
+    metadata: Optional[dict] = None
+
+class IntegrationsStatusResponse(BaseModel):
+    clickup: IntegrationStatus
+    google_calendar: IntegrationStatus
+    openai: dict

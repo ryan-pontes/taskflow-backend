@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
 from uuid import UUID
@@ -5,10 +6,12 @@ from uuid import UUID
 from app.api.auth import get_current_user
 from app.models.schemas import TaskCreate, TaskUpdate, Task, DelegationSuggestion
 from app.integrations.supabase import (
-    create_task, get_task, get_tasks_by_space, 
+    create_task, get_task, get_tasks_by_space,
     get_tasks_by_assignee, update_task, delete_task,
     get_space
 )
+from app.integrations.token_store import get_openai_key, get_clickup_token, get_google_credentials
+from app.services.sync_service import maybe_sync_to_clickup, sync_status_to_clickup
 from app.agents import run_agents
 
 router = APIRouter()
@@ -43,14 +46,21 @@ async def create_new_task(
     
     # Criar tarefa
     created = await create_task(task_data)
-    
-    # Rodar agentes (enriquecimento + delegação)
-    agent_result = await run_agents(
-        action="create_task",
-        input_data=task_data,
-        user_context=user
+
+    # Carregar tokens em paralelo
+    openai_key, clickup_token, google_creds = await asyncio.gather(
+        get_openai_key(user["org_id"]),
+        get_clickup_token(user["org_id"]),
+        get_google_credentials(user["id"]),
     )
-    
+    enriched_user = {**user, "openai_key": openai_key, "clickup_token": clickup_token, "google_creds": google_creds}
+
+    # Rodar agentes (enriquecimento + delegação) e sync ClickUp em paralelo
+    agent_result, _ = await asyncio.gather(
+        run_agents(action="create_task", input_data=task_data, user_context=enriched_user),
+        maybe_sync_to_clickup(created, org_id=user["org_id"]),
+    )
+
     return {
         "task": created,
         "enrichment": agent_result.get("enrichment"),
@@ -109,6 +119,10 @@ async def update_single_task(
         update_data["assignee_id"] = str(data.assignee_id)
     
     updated = await update_task(str(task_id), update_data)
+
+    if data.status:
+        await sync_status_to_clickup(str(task_id), data.status, org_id=user["org_id"])
+
     return updated
 
 
@@ -132,12 +146,9 @@ async def get_delegation_suggestions(
     if not task:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
     
-    result = await run_agents(
-        action="delegate",
-        input_data=task,
-        user_context=user
-    )
-    
+    openai_key = await get_openai_key(user["org_id"])
+    enriched_user = {**user, "openai_key": openai_key}
+    result = await run_agents(action="delegate", input_data=task, user_context=enriched_user)
     return result.get("delegation", {})
 
 
@@ -151,11 +162,9 @@ async def enrich_task(
     if not task:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
     
-    result = await run_agents(
-        action="enrich",
-        input_data=task,
-        user_context=user
-    )
+    openai_key = await get_openai_key(user["org_id"])
+    enriched_user = {**user, "openai_key": openai_key}
+    result = await run_agents(action="enrich", input_data=task, user_context=enriched_user)
     
     enrichment = result.get("enrichment", {})
     

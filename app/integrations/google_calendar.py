@@ -6,24 +6,64 @@ from googleapiclient.discovery import build
 from app.config import settings
 
 class GoogleCalendarClient:
-    def __init__(self, credentials_json: str = None):
-        self.credentials_json = credentials_json or settings.GOOGLE_CREDENTIALS_JSON
-        self._service = None
-    
-    def _get_service(self, access_token: str):
-        """Criar serviço com access token do usuário"""
-        credentials = Credentials(token=access_token)
+    def __init__(self, credentials_data: dict, user_id: str = None):
+        self.credentials_data = credentials_data
+        self.user_id = user_id
+
+    def _get_credentials(self) -> Credentials:
+        import asyncio
+        from google.auth.transport.requests import Request
+
+        creds = Credentials(
+            token=self.credentials_data.get("access_token"),
+            refresh_token=self.credentials_data.get("refresh_token"),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.GOOGLE_CLIENT_ID,
+            client_secret=settings.GOOGLE_CLIENT_SECRET,
+        )
+
+        expires_at_str = self.credentials_data.get("expires_at")
+        if expires_at_str:
+            from datetime import datetime, timezone
+            expires_at = datetime.fromisoformat(expires_at_str)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= datetime.now(timezone.utc):
+                creds.refresh(Request())
+                # Persistir tokens atualizados
+                if self.user_id:
+                    new_expiry = creds.expiry.replace(tzinfo=timezone.utc).isoformat() if creds.expiry else None
+                    new_creds = {
+                        "access_token": creds.token,
+                        "refresh_token": creds.refresh_token or self.credentials_data.get("refresh_token"),
+                        "expires_at": new_expiry,
+                    }
+                    self.credentials_data = new_creds
+                    try:
+                        loop = asyncio.get_event_loop()
+                        loop.create_task(self._persist_credentials(new_creds))
+                    except RuntimeError:
+                        pass
+
+        return creds
+
+    async def _persist_credentials(self, new_creds: dict):
+        from app.integrations.token_store import update_google_credentials
+        await update_google_credentials(self.user_id, new_creds)
+
+    def _get_service(self):
+        """Criar serviço com credentials do usuário"""
+        credentials = self._get_credentials()
         return build('calendar', 'v3', credentials=credentials)
     
     async def get_events(
-        self, 
-        access_token: str,
+        self,
         time_min: datetime = None,
         time_max: datetime = None,
         max_results: int = 50
     ) -> List[dict]:
         """Buscar eventos do calendário"""
-        service = self._get_service(access_token)
+        service = self._get_service()
         
         if not time_min:
             time_min = datetime.utcnow()
@@ -43,17 +83,16 @@ class GoogleCalendarClient:
     
     async def get_availability(
         self,
-        access_token: str,
         date: datetime = None
     ) -> dict:
         """Verificar disponibilidade em uma data"""
         if not date:
             date = datetime.utcnow()
-        
+
         start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day + timedelta(days=1)
-        
-        events = await self.get_events(access_token, start_of_day, end_of_day)
+
+        events = await self.get_events(start_of_day, end_of_day)
         
         # Calcular horas ocupadas vs livres
         busy_hours = 0
@@ -78,7 +117,6 @@ class GoogleCalendarClient:
     
     async def create_event(
         self,
-        access_token: str,
         summary: str,
         start: datetime,
         end: datetime,
@@ -86,7 +124,7 @@ class GoogleCalendarClient:
         attendees: List[str] = None
     ) -> dict:
         """Criar evento no calendário"""
-        service = self._get_service(access_token)
+        service = self._get_service()
         
         event = {
             'summary': summary,
@@ -116,18 +154,16 @@ class GoogleCalendarClient:
     
     async def create_focus_block(
         self,
-        access_token: str,
         date: datetime,
         start_hour: int,
         duration_hours: int,
-        title: str = "🧠 Bloco de Foco"
+        title: str = "Bloco de Foco"
     ) -> dict:
         """Criar bloco de foco no calendário"""
         start = date.replace(hour=start_hour, minute=0, second=0, microsecond=0)
         end = start + timedelta(hours=duration_hours)
-        
+
         return await self.create_event(
-            access_token=access_token,
             summary=title,
             start=start,
             end=end,
@@ -135,5 +171,8 @@ class GoogleCalendarClient:
         )
 
 
-# Singleton
-calendar_client = GoogleCalendarClient()
+async def get_google_client(user_id: str) -> Optional["GoogleCalendarClient"]:
+    """Retorna cliente Google Calendar para o usuário, ou None se não configurado."""
+    from app.integrations.token_store import get_google_credentials
+    creds = await get_google_credentials(user_id)
+    return GoogleCalendarClient(credentials_data=creds, user_id=user_id) if creds else None

@@ -22,9 +22,16 @@ class Settings(BaseSettings):
     
     # ClickUp
     CLICKUP_API_KEY: str = ""
-    
+    CLICKUP_CLIENT_ID: str = ""
+    CLICKUP_CLIENT_SECRET: str = ""
+
     # Google Calendar
     GOOGLE_CREDENTIALS_JSON: str = ""
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
+    # Backend URL (para redirect_uri no OAuth)
+    BACKEND_URL: str = "http://localhost:8000"
     
     # Email (Resend)
     RESEND_API_KEY: str = ""

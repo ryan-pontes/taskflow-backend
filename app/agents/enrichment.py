@@ -5,7 +5,9 @@ from app.config import settings
 
 _llm = None
 
-def get_llm():
+def get_llm(api_key: str = None):
+    if api_key:
+        return ChatOpenAI(model="gpt-4o-mini", temperature=0.3, api_key=api_key)
     global _llm
     if _llm is None:
         _llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3, api_key=settings.OPENAI_API_KEY)
@@ -47,7 +49,7 @@ Enriqueça esta tarefa com informações úteis.""")
 async def run_enrichment_agent(task: dict, user_context: dict) -> dict:
     """Enriquecer tarefa com descrição, subtarefas, etc."""
     
-    chain = ENRICHMENT_PROMPT | get_llm() | JsonOutputParser()
+    chain = ENRICHMENT_PROMPT | get_llm(api_key=user_context.get("openai_key")) | JsonOutputParser()
     
     # Contexto baseado no tipo de tarefa
     context = ""

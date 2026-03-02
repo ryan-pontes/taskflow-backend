@@ -189,6 +189,56 @@ create index idx_activity_org on activity_log(org_id);
 create index idx_activity_entity on activity_log(entity_type, entity_id);
 
 -- =============================================
+-- INTEGRATIONS (OAuth tokens e API keys por org/usuário)
+-- =============================================
+create table integrations (
+  id uuid primary key default uuid_generate_v4(),
+  org_id uuid references organizations(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  provider text not null, -- 'clickup', 'google_calendar', 'openai'
+  credentials jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  is_active boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+
+  -- Cada provedor tem no máximo uma integração por org OU por usuário
+  constraint integrations_org_provider_unique unique (org_id, provider),
+  constraint integrations_user_provider_unique unique (user_id, provider),
+  -- Garante que pelo menos um dos dois está preenchido
+  constraint integrations_scope_check check (
+    (org_id is not null and user_id is null) or
+    (user_id is not null and org_id is null)
+  )
+);
+
+create index idx_integrations_org on integrations(org_id) where org_id is not null;
+create index idx_integrations_user on integrations(user_id) where user_id is not null;
+create index idx_integrations_provider on integrations(provider);
+
+-- RLS: gestores veem integrations da org; usuários veem as próprias
+alter table integrations enable row level security;
+
+create policy "Managers can manage org integrations"
+  on integrations for all
+  using (
+    org_id in (
+      select org_id from members
+      where user_id = auth.uid() and role = 'manager'
+    )
+  );
+
+create policy "Users can manage own integrations"
+  on integrations for all
+  using (user_id = auth.uid());
+
+-- Trigger updated_at
+create trigger integrations_updated_at
+  before update on integrations
+  for each row
+  execute function update_updated_at();
+
+-- =============================================
 -- FUNCTIONS
 -- =============================================
 

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import settings
-from app.api import auth, tasks, spaces, members, invites, chat
+from app.api import auth, tasks, spaces, members, invites, chat, integrations
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,6 +35,7 @@ app.include_router(spaces.router, prefix="/api/spaces", tags=["Spaces"])
 app.include_router(members.router, prefix="/api/members", tags=["Members"])
 app.include_router(invites.router, prefix="/api/invites", tags=["Invites"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(integrations.router, prefix="/api/integrations", tags=["Integrations"])
 
 @app.get("/health")
 async def health():

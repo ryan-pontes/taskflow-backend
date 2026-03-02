@@ -47,7 +47,7 @@ def get_llm_fast():
 
 
 # Router - decide qual agente chamar
-def router(state: AgentState) -> Literal["delegation", "enrichment", "assistant", "profile", "end"]:
+def router(state: AgentState) -> Literal["delegation", "enrichment", "assistant", "profile", "finalize"]:
     action = state.get("action", "")
     
     if action == "create_task":
@@ -57,21 +57,21 @@ def router(state: AgentState) -> Literal["delegation", "enrichment", "assistant"
         elif not state.get("delegation_result"):
             return "delegation"
         else:
-            return "end"
-    
+            return "finalize"
+
     elif action == "chat":
         return "assistant"
-    
+
     elif action == "enrich":
         return "enrichment"
-    
+
     elif action == "delegate":
         return "delegation"
-    
+
     elif action == "profile":
         return "profile"
-    
-    return "end"
+
+    return "finalize"
 
 
 # Import dos agentes (serão criados em arquivos separados)
@@ -107,10 +107,11 @@ async def assistant_node(state: AgentState) -> AgentState:
 
 
 async def profile_node(state: AgentState) -> AgentState:
+    data = {**state["input_data"], "openai_key": state["user_context"].get("openai_key")}
     result = await run_profile_agent(
         member_id=state["input_data"].get("member_id"),
         action=state["input_data"].get("profile_action", "analyze"),
-        data=state["input_data"]
+        data=data
     )
     return {"profile_result": result}
 
