@@ -39,5 +39,3 @@ redis==5.0.1
 python-dotenv==1.0.1
 python-jose[cryptography]==3.3.0
 
-# PDF Generation
-weasyprint==61.0
