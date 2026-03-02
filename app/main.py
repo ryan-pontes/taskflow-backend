@@ -20,9 +20,10 @@ app = FastAPI(
 )
 
 # CORS
+allowed_origins = [settings.FRONTEND_URL] if settings.FRONTEND_URL else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produção, especificar domínios
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

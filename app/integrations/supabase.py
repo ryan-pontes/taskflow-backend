@@ -102,9 +102,12 @@ async def get_tasks_by_assignee(assignee_id: str) -> List[dict]:
     return result.data
 
 async def get_tasks_by_org(org_id: str) -> List[dict]:
-    # Buscar tarefas de todos os spaces da org
-    result = supabase_admin.table("tasks").select("*, spaces!inner(org_id)").eq("spaces.org_id", org_id).execute()
-    return result.data
+    spaces = supabase_admin.table("spaces").select("id").eq("org_id", org_id).execute()
+    space_ids = [s["id"] for s in (spaces.data or [])]
+    if not space_ids:
+        return []
+    result = supabase_admin.table("tasks").select("*").in_("space_id", space_ids).order("created_at", desc=True).execute()
+    return result.data or []
 
 async def get_task(task_id: str) -> Optional[dict]:
     result = supabase_admin.table("tasks").select("*").eq("id", task_id).single().execute()

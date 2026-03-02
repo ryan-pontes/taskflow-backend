@@ -6,7 +6,7 @@ from uuid import UUID
 from app.api.auth import get_current_user
 from app.models.schemas import TaskCreate, TaskUpdate, Task, DelegationSuggestion
 from app.integrations.supabase import (
-    create_task, get_task, get_tasks_by_space,
+    create_task, get_task, get_tasks_by_space, get_tasks_by_org,
     get_tasks_by_assignee, update_task, delete_task,
     get_space
 )
@@ -15,6 +15,14 @@ from app.services.sync_service import maybe_sync_to_clickup, sync_status_to_clic
 from app.agents import run_agents
 
 router = APIRouter()
+
+
+@router.get("/", response_model=List[dict])
+async def get_all_org_tasks(
+    user: dict = Depends(get_current_user)
+):
+    """Listar todas as tarefas da organização"""
+    return await get_tasks_by_org(user["org_id"])
 
 
 @router.post("/", response_model=dict)
